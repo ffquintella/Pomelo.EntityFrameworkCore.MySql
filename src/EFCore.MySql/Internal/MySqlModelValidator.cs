@@ -41,20 +41,6 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
         }
 
         /// <inheritdoc />
-        protected override void ValidateJsonEntities(
-            IModel model,
-            IDiagnosticsLogger<DbLoggerCategory.Model.Validation> logger)
-        {
-            foreach (var entityType in model.GetEntityTypes())
-            {
-                if (entityType.IsMappedToJson())
-                {
-                    throw new InvalidOperationException(MySqlStrings.Ef7CoreJsonMappingNotSupported);
-                }
-            }
-        }
-
-        /// <inheritdoc />
         protected override void ValidateStoredProcedures(
             IModel model,
             IDiagnosticsLogger<DbLoggerCategory.Model.Validation> logger)

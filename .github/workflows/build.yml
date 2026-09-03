@@ -3,13 +3,9 @@ on:
   push:
     branches:
       - '**'
-    paths-ignore:
-      - '**.md'
   pull_request:
     branches:
       - '**'
-    paths-ignore:
-      - '**.md'
   release:
     types:
       - published
@@ -24,7 +20,18 @@ env:
   skipAllTests: false
   skipWindowsTests: false
 jobs:
+  CIContract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validate EF Core 10 CI contract
+        shell: bash
+        run: ./test/EFCore.MySql.FunctionalTests/validate-efcore10-ci.sh
   BuildAndTest:
+    needs: CIContract
     strategy:
       fail-fast: false
       matrix:
@@ -45,6 +52,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Set additional variables
         shell: pwsh
         run: |
@@ -55,6 +64,9 @@ jobs:
 
           $databaseServerType = $dbVersionParts[1]
           echo "databaseServerType=$databaseServerType" >> $env:GITHUB_ENV
+
+          $functionalTestMaxParallelThreads = $os -eq 'linux' -and $databaseServerType -eq 'mariadb' ? 1 : 0
+          echo "functionalTestMaxParallelThreads=$functionalTestMaxParallelThreads" >> $env:GITHUB_ENV
 
           $databaseServerVersion = $dbVersionParts[0]
           echo "databaseServerVersion=$databaseServerVersion" >> $env:GITHUB_ENV
@@ -84,6 +96,7 @@ jobs:
           echo "os: ${{ env.os }}"
           echo "databaseServerType: ${{ env.databaseServerType }}"
           echo "databaseServerVersion: ${{ env.databaseServerVersion }}"
+          echo "functionalTestMaxParallelThreads: ${{ env.functionalTestMaxParallelThreads }}"
           echo "sqlMode: ${{ env.sqlMode }}"
           echo "skipTests: ${{ env.skipTests }}"
           echo "skipAllTests: ${{ env.skipAllTests }}"
@@ -95,6 +108,9 @@ jobs:
 
           echo "github.event_name: ${{ github.event_name }}"
           echo "github.repository: ${{ github.repository }}"
+      - name: EF Core 10 specification audit
+        shell: bash
+        run: ./test/EFCore.MySql.FunctionalTests/audit-efcore10-spec-coverage.sh
       - name: Cache - Database Image - Linux
         id: cache-databaseImage-linux
         uses: actions/cache@v4
@@ -109,7 +125,7 @@ jobs:
         with:
           path: ${{ env.windowsUserTempLocation }}\Pomelo.Chocolatey.${{ env.databaseServerType }}.Server
           key: database-windows-${{ env.databaseServerType }}-${{ env.databaseServerVersion }}-v3
-      - name: Install Database Server - Linux
+      - name: Infrastructure - Install Database Server - Linux
         if: ${{ env.os == 'linux' }}
         shell: pwsh
         run: |
@@ -151,7 +167,7 @@ jobs:
             throw "${{ env.databaseServerType }}:${{ env.databaseServerVersion }} docker container failed to start in ${waitMinutes} minutes"
             exit 1
           }
-      - name: Install Database Server - Windows
+      - name: Infrastructure - Install Database Server - Windows
         if: ${{ env.os == 'windows' }}
         shell: pwsh
         run: |
@@ -204,10 +220,10 @@ jobs:
           ${{ env.clientCommandPrefix }} -h localhost -u root -pPassword12! -e "SELECT @@version;"
 
           dir "$env:Temp\${packageName}\${{ env.databaseServerVersion }}" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
-      - name: Setup Database
+      - name: Infrastructure - Setup Database
         shell: pwsh
         run: ${{ env.clientCommandPrefix }} -u root -pPassword12! -e "SET GLOBAL sql_mode = '${{ env.sqlMode }}'; SET GLOBAL max_connections = ${{ env.maxConnections }};"
-      - name: Database Information
+      - name: Infrastructure - Database Information
         shell: pwsh
         run: ${{ env.clientCommandPrefix }} -u root -pPassword12! -e 'SHOW VARIABLES;'
       - name: Setup .NET SDK
@@ -239,12 +255,12 @@ jobs:
       - name: Build Solution
         shell: pwsh
         run: |
-          dotnet build -c Debug
-          dotnet build -c Release
+          dotnet build -c Debug -p:TreatWarningsAsErrors=true
+          dotnet build -c Release -p:TreatWarningsAsErrors=true
       - name: Functional Tests
         if: ${{ env.skipTests != 'true' }}
         shell: pwsh
-        run: dotnet test test/EFCore.MySql.FunctionalTests -c Debug --no-build --logger "GitHubActions;report-warnings=false" --verbosity detailed
+        run: dotnet test test/EFCore.MySql.FunctionalTests -c Debug --no-build --logger "GitHubActions;report-warnings=false" --verbosity detailed -- xUnit.MaxParallelThreads=${{ env.functionalTestMaxParallelThreads }}
       - name: Tests
         if: ${{ env.skipTests != 'true' }}
         shell: pwsh
@@ -257,6 +273,10 @@ jobs:
         if: ${{ env.skipTests != 'true' }}
         shell: pwsh
         run: ./test/EFCore.MySql.IntegrationTests/scripts/scaffold.ps1
+      - name: Integration Tests - Compiled model
+        if: ${{ env.skipTests != 'true' }}
+        shell: pwsh
+        run: ./test/EFCore.MySql.IntegrationTests/scripts/optimize.ps1
       - name: Integration Tests - With EF_BATCH_SIZE = 1
         if: ${{ env.skipTests != 'true' }}
         shell: pwsh
@@ -278,7 +298,14 @@ jobs:
       - name: Integration Tests - Legacy migrations
         if: ${{ env.skipTests != 'true' }}
         shell: pwsh
-        run: ./test/EFCore.MySql.IntegrationTests/scripts/legacy.ps1
+        run: |
+          $migrationDirectory = 'test/EFCore.MySql.IntegrationTests/Migrations'
+          $trackedMigrations = @(git ls-files -- ":(glob)$migrationDirectory/*.cs")
+          if ($LASTEXITCODE -ne 0) { throw 'git ls-files failed.' }
+          if ($trackedMigrations.Count -ne 0) { throw 'Refusing to run with tracked migration sources.' }
+          git clean -fX -- ":(glob)$migrationDirectory/*.cs"
+          if ($LASTEXITCODE -ne 0) { throw 'git clean failed.' }
+          ./test/EFCore.MySql.IntegrationTests/scripts/legacy.ps1
       - name: Integration Tests - Building migrations with EF_DATABASE = pomelo_test2
         if: ${{ env.skipTests != 'true' }}
         shell: pwsh
@@ -297,13 +324,36 @@ jobs:
         run: |
           $env:EF_DATABASE = "pomelo_test2"
           dotnet test -c Release --no-build --logger "GitHubActions;report-warnings=false" test/EFCore.MySql.IntegrationTests
-  NuGet:
+  PackageConsumer:
     needs: BuildAndTest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Pack and verify local package consumer
+        shell: bash
+        run: ./test/EFCore.MySql.PackageConsumer/scripts/package-consumer.sh
+      - name: Upload package validation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: efcore10-package-consumer
+          path: artifacts/packages
+          if-no-files-found: error
+  NuGet:
+    needs: [BuildAndTest, PackageConsumer]
     if: (github.event_name == 'push' || github.event_name == 'release') && github.repository == 'PomeloFoundation/Pomelo.EntityFrameworkCore.MySql'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v4
         with:

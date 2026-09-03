@@ -143,8 +143,18 @@ WHERE `o`.`Value` NOT LIKE 'A%' OR (`o`.`Value` IS NULL)
 """);
     }
 
-    public override Task Concat_and_json_scalar(bool async)
-        => Assert.ThrowsAsync<InvalidOperationException>(() => base.Concat_and_json_scalar(async));
+    public override async Task Concat_and_json_scalar(bool async)
+    {
+        await base.Concat_and_json_scalar(async);
+
+        AssertSql(
+"""
+SELECT `o`.`Id`, `o`.`Owned`
+FROM `Owner` AS `o`
+WHERE (CONCAT('Foo', CAST(JSON_VALUE(`o`.`Owned`, '$.SomeProperty') AS char))) = 'FooBar'
+LIMIT 2
+""");
+    }
 
     protected override async Task Seed(OperatorsContext ctx)
     {

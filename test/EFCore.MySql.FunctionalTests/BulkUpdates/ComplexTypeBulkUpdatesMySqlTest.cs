@@ -520,6 +520,9 @@ WHERE `r`.`OptionalAssociate_Id` IS NOT NULL
 
     public class ComplexTableSplittingMySqlFixture : ComplexTableSplittingRelationalFixtureBase
     {
+        protected override string StoreName
+            => "ComplexTypeBulkUpdatesTest";
+
         protected override ITestStoreFactory TestStoreFactory
             => MySqlTestStoreFactory.Instance;
     }

@@ -306,13 +306,15 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
             var storeTypeNameBase = mappingInfo.StoreTypeNameBase;
 
             // EF Core 10 maps structural types (complex types and owned entities) configured with ToJson() using this
-            // placeholder CLR type. MySQL and MariaDB store JSON data in a native `json` column.
+            // placeholder CLR type. MySQL stores JSON in a native `json` column; MariaDB exposes `json` as a
+            // LONGTEXT alias.
             if (clrType == typeof(JsonTypePlaceholder))
             {
-                return storeTypeName is null ||
-                       storeTypeName.Equals("json", StringComparison.OrdinalIgnoreCase)
-                    ? MySqlStructuralJsonTypeMapping.Default
-                    : new MySqlStructuralJsonTypeMapping(storeTypeName);
+                return new MySqlStructuralJsonTypeMapping(
+                    storeTypeName ?? "json",
+                    _options.NoBackslashEscapes,
+                    _options.ReplaceLineBreaksWithCharFunction,
+                    _options.ServerVersion.Supports.JsonDataTypeEmulation);
             }
 
             if (storeTypeName != null)

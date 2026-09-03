@@ -30,7 +30,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
         protected virtual void SetSql(string value)
             => Sql = value.Replace(ProductInfo.GetVersion(), "7.0.0-test");
 
-        [ConditionalFact(Skip = "EF Core 10 changed migration script generation (explicit transaction wrapping and migrations-history product version); these provider-specific PK-stored-procedure / delimiter / idempotent-script baselines need reconciliation for EF Core 10.")]
+        [ConditionalFact]
         public virtual void Can_create_stored_procedure_script_without_custom_delimiter_statements()
         {
             using var db = Fixture.CreateContext<FullInfrastructureMigrationsFixture.MigrationPrimaryKeyChangeContext>(
@@ -49,8 +49,6 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
                     fromMigration: Migration.InitialDatabase,
                     toMigration: "00000000000002_MigrationPrimaryKeyChange2"));
 
-            // TODO: 9.0
-            // Pomelo helper stored procedure statements should be inside the transaction scope.
             Assert.Equal(
 """
 CREATE TABLE IF NOT EXISTS `__EFMigrationsHistory` (
@@ -69,6 +67,9 @@ CREATE TABLE `Table1` (
 INSERT INTO `__EFMigrationsHistory` (`MigrationId`, `ProductVersion`)
 VALUES ('00000000000001_MigrationPrimaryKeyChange1', '7.0.0-test');
 
+COMMIT;
+
+START TRANSACTION;
 DROP PROCEDURE IF EXISTS `POMELO_BEFORE_DROP_PRIMARY_KEY`;
 CREATE PROCEDURE `POMELO_BEFORE_DROP_PRIMARY_KEY`(IN `SCHEMA_NAME_ARGUMENT` VARCHAR(255), IN `TABLE_NAME_ARGUMENT` VARCHAR(255))
 BEGIN
@@ -164,7 +165,7 @@ COMMIT;
                 ignoreLineEndingDifferences: true);
         }
 
-        [ConditionalFact(Skip = "EF Core 10 changed migration script generation (explicit transaction wrapping and migrations-history product version); these provider-specific PK-stored-procedure / delimiter / idempotent-script baselines need reconciliation for EF Core 10.")]
+        [ConditionalFact]
         public virtual void Can_generate_idempotent_up_scripts_with_primary_key_related_stored_procedures()
         {
             using var db = Fixture.CreateContext<FullInfrastructureMigrationsFixture.MigrationPrimaryKeyChangeContext>();
@@ -180,12 +181,41 @@ COMMIT;
                     toMigration: "00000000000002_MigrationPrimaryKeyChange2"));
 
             ApplySqlScript(db);
+            ApplySqlScript(db);
 
             var history = db.GetService<IHistoryRepository>();
             Assert.Collection(
                 history.GetAppliedMigrations(),
                 h => Assert.Equal("00000000000001_MigrationPrimaryKeyChange1", h.MigrationId),
                 h => Assert.Equal("00000000000002_MigrationPrimaryKeyChange2", h.MigrationId));
+
+            db.Database.OpenConnection();
+            using var command = db.Database.GetDbConnection().CreateCommand();
+
+            command.CommandText = """
+SELECT GROUP_CONCAT(`COLUMN_NAME` ORDER BY `ORDINAL_POSITION`)
+FROM `information_schema`.`COLUMNS`
+WHERE `TABLE_SCHEMA` = DATABASE()
+    AND `TABLE_NAME` = 'Table1';
+""";
+            Assert.Equal("Id,AlternatePK", command.ExecuteScalar());
+
+            command.CommandText = """
+SELECT GROUP_CONCAT(`COLUMN_NAME` ORDER BY `ORDINAL_POSITION`)
+FROM `information_schema`.`KEY_COLUMN_USAGE`
+WHERE `CONSTRAINT_SCHEMA` = DATABASE()
+    AND `TABLE_NAME` = 'Table1'
+    AND `CONSTRAINT_NAME` = 'PRIMARY';
+""";
+            Assert.Equal("AlternatePK", command.ExecuteScalar());
+
+            command.CommandText = """
+SELECT COUNT(*)
+FROM `information_schema`.`ROUTINES`
+WHERE `ROUTINE_SCHEMA` = DATABASE()
+    AND `ROUTINE_NAME` IN ('MigrationsScript', 'POMELO_BEFORE_DROP_PRIMARY_KEY', 'POMELO_AFTER_ADD_PRIMARY_KEY');
+""";
+            Assert.Equal(0L, command.ExecuteScalar());
 
             Assert.Equal(
 """
@@ -311,6 +341,9 @@ DELIMITER ;
 CALL MigrationsScript();
 DROP PROCEDURE MigrationsScript;
 
+COMMIT;
+
+START TRANSACTION;
 DROP PROCEDURE IF EXISTS MigrationsScript;
 DELIMITER //
 CREATE PROCEDURE MigrationsScript()
@@ -368,7 +401,7 @@ DROP PROCEDURE `POMELO_AFTER_ADD_PRIMARY_KEY`;
                 ignoreLineEndingDifferences: true);
         }
 
-        [ConditionalFact(Skip = "EF Core 10 changed migration script generation (explicit transaction wrapping and migrations-history product version); these provider-specific PK-stored-procedure / delimiter / idempotent-script baselines need reconciliation for EF Core 10.")]
+        [ConditionalFact]
         public virtual void Alter_column_change_primary_key_will_not_try_to_declare_default_value_in_sql()
         {
             using var db = Fixture.CreateContext<FullInfrastructureMigrationsFixture.MigrationPrimaryKeyChangeFromStringToIntContext>(
@@ -401,6 +434,9 @@ CREATE TABLE `IceCreams` (
 INSERT INTO `__EFMigrationsHistory` (`MigrationId`, `ProductVersion`)
 VALUES ('00000000000001_Migration1', '7.0.0-test');
 
+COMMIT;
+
+START TRANSACTION;
 DROP PROCEDURE IF EXISTS `POMELO_BEFORE_DROP_PRIMARY_KEY`;
 CREATE PROCEDURE `POMELO_BEFORE_DROP_PRIMARY_KEY`(IN `SCHEMA_NAME_ARGUMENT` VARCHAR(255), IN `TABLE_NAME_ARGUMENT` VARCHAR(255))
 BEGIN
@@ -495,7 +531,7 @@ COMMIT;
                 ignoreLineEndingDifferences: true);
         }
 
-        [ConditionalFact(Skip = "EF Core 10 changed migration script generation (explicit transaction wrapping and migrations-history product version); these provider-specific PK-stored-procedure / delimiter / idempotent-script baselines need reconciliation for EF Core 10.")]
+        [ConditionalFact]
         public virtual void Drop_primary_key_with_recreating_foreign_keys()
         {
             using var db = Fixture.CreateContext<FullInfrastructureMigrationsFixture.MigrationDropPrimaryKeyWithRecreatingForeignKeysContext>();
@@ -547,6 +583,9 @@ CREATE TABLE `FooBar` (
 INSERT INTO `__EFMigrationsHistory` (`MigrationId`, `ProductVersion`)
 VALUES ('00000000000001_MigrationDropPrimaryKeyWithRecreatingForeignKeys1', '7.0.0-test');
 
+COMMIT;
+
+START TRANSACTION;
 DROP PROCEDURE IF EXISTS `POMELO_BEFORE_DROP_PRIMARY_KEY`;
 DELIMITER //
 CREATE PROCEDURE `POMELO_BEFORE_DROP_PRIMARY_KEY`(IN `SCHEMA_NAME_ARGUMENT` VARCHAR(255), IN `TABLE_NAME_ARGUMENT` VARCHAR(255))

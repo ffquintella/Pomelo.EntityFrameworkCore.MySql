@@ -8,6 +8,8 @@ using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.TestUtilities;
 using NameSpace1;
 using Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+using Pomelo.EntityFrameworkCore.MySql.Tests.TestUtilities.Attributes;
 using Xunit;
 
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Query;
@@ -80,6 +82,125 @@ INSERT INTO `ZeroKey` VALUES (NULL)
         Assert.Equal(new[] { 2, 3, 4 }, result);
     }
 
+    [ConditionalFact]
+    public async Task Nested_Skip_Take_uses_current_values_for_each_execution()
+    {
+        var contextFactory = await InitializeAsync<LimitOffsetContext>(seed: c => c.SeedAsync());
+        using var context = contextFactory.CreateContext();
+
+        var skip = 1;
+        var take1 = 6;
+        var take2 = 3;
+
+        IQueryable<int> Query()
+            => context.Set<LimitOffsetEntity>()
+                .OrderBy(e => e.Id)
+                .Skip(skip).Take(take1)
+                .Take(take2)
+                .Select(e => e.Id);
+
+        var first = await Query().ToListAsync();
+
+        skip = 4;
+        take1 = 4;
+        take2 = 2;
+
+        var second = await Query().ToListAsync();
+
+        Assert.Equal(new[] { 2, 3, 4 }, first);
+        Assert.Equal(new[] { 5, 6 }, second);
+
+        var sql = TestSqlLoggerFactory.SqlStatements.Last();
+        Assert.DoesNotContain("LEAST", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("GREATEST", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("@p='4'", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("LIMIT 2", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LIMIT 3", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [ConditionalFact]
+    public async Task String_comparison_runtime_parameter_uses_current_value_for_each_execution()
+    {
+        var contextFactory = await InitializeAsync<LimitOffsetContext>(
+            seed: c => c.SeedAsync(),
+            onConfiguring: b => new MySqlDbContextOptionsBuilder(b).EnableStringComparisonTranslations());
+        using var context = contextFactory.CreateContext();
+
+        var pattern = "1";
+
+        IQueryable<int> Query()
+            => context.Set<LimitOffsetEntity>()
+                .Where(e => e.Name.Contains(pattern, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(e => e.Id)
+                .Select(e => e.Id);
+
+        var first = await Query().ToListAsync();
+
+        pattern = "2";
+        var second = await Query().ToListAsync();
+
+        Assert.Equal(new[] { 1, 10 }, first);
+        Assert.Equal(new[] { 2 }, second);
+
+        var sql = TestSqlLoggerFactory.SqlStatements.Last();
+        Assert.Contains("LIKE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("'%2%'", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("'%1%'", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [ConditionalFact]
+    public Task Parameterized_collection_uses_current_values_for_each_execution()
+        => Parameterized_collection_uses_current_values_for_each_execution_core(ParameterTranslationMode.Constant);
+
+    [ConditionalTheory]
+    [SupportedServerVersionCondition(nameof(ServerVersionSupport.JsonTable))]
+    [InlineData(ParameterTranslationMode.Parameter)]
+    public Task Parameterized_collection_uses_current_values_for_each_execution_parameter(ParameterTranslationMode mode)
+        => Parameterized_collection_uses_current_values_for_each_execution_core(mode);
+
+    private async Task Parameterized_collection_uses_current_values_for_each_execution_core(ParameterTranslationMode mode)
+    {
+        var contextFactory = await InitializeAsync<PrimitiveCollectionContext>(
+            seed: c => c.SeedAsync(),
+            onConfiguring: b => new MySqlDbContextOptionsBuilder(b)
+                .UseParameterizedCollectionMode(mode),
+            usePooling: false);
+        using var context = contextFactory.CreateContext();
+
+        var ids = new[] { 2, 3 };
+
+        IQueryable<int> Query()
+            => context.Set<LimitOffsetEntity>()
+                .Where(e => ids.Contains(e.Id))
+                .OrderBy(e => e.Id)
+                .Select(e => e.Id);
+
+        var first = await Query().ToListAsync();
+
+        ids = new[] { 5, 6 };
+        var second = await Query().ToListAsync();
+
+        Assert.Equal(new[] { 2, 3 }, first);
+        Assert.Equal(new[] { 5, 6 }, second);
+
+        var sql = TestSqlLoggerFactory.SqlStatements.Last();
+        switch (mode)
+        {
+            case ParameterTranslationMode.Constant:
+                Assert.Contains("IN (5, 6)", sql, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("IN (2, 3)", sql, StringComparison.OrdinalIgnoreCase);
+                break;
+
+            case ParameterTranslationMode.Parameter:
+                Assert.Contains("JSON_TABLE('[5,6]'", sql, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("JSON_TABLE('[2,3]'", sql, StringComparison.OrdinalIgnoreCase);
+                break;
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(mode), mode, null);
+        }
+    }
+
     private class LimitOffsetEntity
     {
         public int Id { get; set; }
@@ -94,6 +215,15 @@ INSERT INTO `ZeroKey` VALUES (NULL)
         {
             AddRange(Enumerable.Range(1, 10).Select(i => new LimitOffsetEntity { Id = i, Name = "Name" + i }));
             return SaveChangesAsync();
+        }
+    }
+
+    private class PrimitiveCollectionContext(DbContextOptions options) : LimitOffsetContext(options)
+    {
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+        {
+            base.OnConfiguring(optionsBuilder);
+            new MySqlDbContextOptionsBuilder(optionsBuilder).EnablePrimitiveCollectionsSupport();
         }
     }
 }

@@ -133,13 +133,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities.Xunit
             var aggregateException = exception as AggregateException ??
                                      new AggregateException(exception);
 
-            // MariaDB (observed on the native Windows build of 11.6.x) can spuriously raise
-            // error 1020 (ER_CHECKREAD, "Record has changed since last read") while executing
-            // ExecuteUpdate/ExecuteDelete statements against table-split entities. The identical
-            // server version executes the very same statements correctly on Linux, so this is a
-            // server-side bug rather than a provider issue, and it surfaces non-deterministically
-            // across the affected tests. Treat it as a skip instead of a failure.
-            if (AppConfig.ServerVersion.Type == ServerType.MariaDb &&
+            // The native Windows build of MariaDB 11.6.2 can spuriously raise error 1020
+            // (ER_CHECKREAD, "Record has changed since last read") while executing the
+            // table-splitting bulk tests. The same server version executes the statements
+            // correctly on Linux, so keep this skip limited to the affected platform, version,
+            // and test classes.
+            if (IsMariaDbWindowsTableSplittingBulkTest() &&
                 aggregateException.InnerExceptions.Any(IsMariaDbRecordHasChangedException))
             {
                 return true;
@@ -177,8 +176,14 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities.Xunit
             return skip;
         }
 
+        private bool IsMariaDbWindowsTableSplittingBulkTest()
+            => OperatingSystem.IsWindows()
+               && AppConfig.ServerVersion.Type == ServerType.MariaDb
+               && AppConfig.ServerVersion.Version == new Version(11, 6, 2)
+               && Test.TestCase.TestMethod.TestClass.Class.Name is
+                   "ComplexTypeBulkUpdatesMySqlTest" or "ComplexTableSplittingBulkUpdateMySqlTest";
+
         private static bool IsMariaDbRecordHasChangedException(Exception exception)
-            => exception is MySqlException { Number: 1020 } ||
-               exception.Message.Contains("Record has changed since last read");
+            => exception is MySqlException { Number: 1020 };
     }
 }

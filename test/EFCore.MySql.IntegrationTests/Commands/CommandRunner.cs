@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using Microsoft.EntityFrameworkCore;
 
 namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Commands{
 
@@ -25,6 +27,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Commands{
             Console.Error.WriteLine(@"dotnet run
     connectionString   print connection string
     testMigrate        test dbContext.Database functions: ensureCreate, ensureDelete, migrate
+    compiledModel      load the generated compiled model and execute a query
     testPerformance [iterations] [concurrency] [operations]
     -h, --help         show this message
             ");
@@ -44,6 +47,22 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Commands{
                     case "testMigrate":
                         _testMigrateCommand.Run();
 			            break;
+                    case "compiledModel":
+                        using (var scope = new AppDbScope())
+                        {
+                            var db = scope.AppDb;
+                            if (db.Model.GetType().FullName != "Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Optimize.AppDbModel")
+                            {
+                                throw new InvalidOperationException($"The generated compiled model was not loaded. Actual model: {db.Model.GetType().FullName}");
+                            }
+
+                            db.DataTypesSimple
+                                .AsNoTracking()
+                                .Select(e => e.Id)
+                                .Take(1)
+                                .ToList();
+                        }
+                        break;
 	                case "testPerformance":
 	                    if (args.Length != 4)
                         {

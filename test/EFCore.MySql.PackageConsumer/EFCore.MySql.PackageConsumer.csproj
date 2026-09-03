@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Pomelo.EntityFrameworkCore.MySql.PackageConsumer</RootNamespace>
+    <AssemblyName>Pomelo.EntityFrameworkCore.MySql.PackageConsumer</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+
+    <!-- This project must resolve the provider as a package, never as a project reference. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <ConsumerProviderVersion Condition="'$(ConsumerProviderVersion)' == ''">10.0.0-rtm.3</ConsumerProviderVersion>
+    <ConsumerEfCoreVersion Condition="'$(ConsumerEfCoreVersion)' == ''">10.0.0</ConsumerEfCoreVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The parent test props add the repository's xUnit stack to every project below test/. -->
+    <PackageReference Remove="GitHubActionsTestLogger;Microsoft.NET.Test.Sdk;xunit.assert;xunit.core;xunit.runner.console;xunit.runner.visualstudio;Xunit.SkippableFact" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="$(ConsumerEfCoreVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="$(ConsumerEfCoreVersion)" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="$(ConsumerEfCoreVersion)" PrivateAssets="all" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.11" PrivateAssets="all" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="$(ConsumerProviderVersion)" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql.Json.Microsoft" Version="$(ConsumerProviderVersion)" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql.Json.Newtonsoft" Version="$(ConsumerProviderVersion)" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql.NetTopologySuite" Version="$(ConsumerProviderVersion)" />
+  </ItemGroup>
+
+</Project>

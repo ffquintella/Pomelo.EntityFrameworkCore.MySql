@@ -84,7 +84,8 @@ public class MySqlQueryableMethodTranslatingExpressionVisitor : RelationalQuerya
         => selectExpression.Offset == null
             && selectExpression.GroupBy.Count == 0
             && selectExpression.Having == null
-            && (selectExpression.Tables.Count == 1 || selectExpression.Orderings.Count == 0);
+            && (selectExpression.Tables.Count == 1
+                || selectExpression.Orderings.Count == 0 && selectExpression.Limit is null);
 
     protected override bool IsValidSelectExpressionForExecuteUpdate(
         SelectExpression selectExpression,

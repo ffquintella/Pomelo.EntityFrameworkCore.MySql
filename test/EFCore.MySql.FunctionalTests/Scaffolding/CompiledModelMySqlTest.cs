@@ -329,12 +329,9 @@ public class CompiledModelMySqlTest(NonSharedFixture fixture) : CompiledModelRel
             });
     }
 
-    public override async Task BigModel_with_JSON_columns()
-    {
-        Assert.Equal(
-            MySqlStrings.Ef7CoreJsonMappingNotSupported,
-            (await Assert.ThrowsAsync<InvalidOperationException>(() => base.BigModel_with_JSON_columns())).Message);
-    }
+    [ConditionalFact]
+    public override Task BigModel_with_JSON_columns()
+        => base.BigModel_with_JSON_columns();
 
     // TODO: 9.0
     // Check, if we can make this work.
@@ -394,12 +391,12 @@ public class CompiledModelMySqlTest(NonSharedFixture fixture) : CompiledModelRel
         }
     }
 
-    [ConditionalFact(Skip = "Compiled-model generated-code baseline needs regeneration for EF Core 10.")]
+    [ConditionalFact]
     public override Task BigModel()
-        => Task.CompletedTask;
+        => base.BigModel();
 
-    [ConditionalFact(Skip = "Compiled-model generated-code baseline needs regeneration for EF Core 10.")]
+    [ConditionalFact]
     public override Task No_NativeAOT()
-        => Task.CompletedTask;
+        => base.No_NativeAOT();
 
 }

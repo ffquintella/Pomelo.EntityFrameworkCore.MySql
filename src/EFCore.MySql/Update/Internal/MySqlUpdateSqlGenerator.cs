@@ -10,9 +10,11 @@ using System.Text;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.EntityFrameworkCore.Utilities;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
 
 namespace Pomelo.EntityFrameworkCore.MySql.Update.Internal
 {
@@ -160,6 +162,32 @@ namespace Pomelo.EntityFrameworkCore.MySql.Update.Internal
             SqlGenerationHelper.DelimitIdentifier(commandStringBuilder, columnModification.ColumnName);
             commandStringBuilder.Append(" = ")
                 .Append("LAST_INSERT_ID()");
+        }
+
+        protected override void AppendUpdateColumnValue(
+            ISqlGenerationHelper updateSqlGeneratorHelper,
+            IColumnModification columnModification,
+            StringBuilder stringBuilder,
+            string name,
+            string schema)
+        {
+            if (columnModification.JsonPath is null || columnModification.JsonPath == "$")
+            {
+                base.AppendUpdateColumnValue(updateSqlGeneratorHelper, columnModification, stringBuilder, name, schema);
+                return;
+            }
+
+            stringBuilder.Append("JSON_SET(");
+            updateSqlGeneratorHelper.DelimitIdentifier(stringBuilder, columnModification.ColumnName);
+            stringBuilder.Append(", ");
+            stringBuilder.Append(
+                MySqlStringTypeMapping.EscapeSqlLiteralWithLineBreaks(
+                    columnModification.JsonPath,
+                    !_options.NoBackslashEscapes,
+                    _options.ReplaceLineBreaksWithCharFunction));
+            stringBuilder.Append(", ");
+            base.AppendUpdateColumnValue(updateSqlGeneratorHelper, columnModification, stringBuilder, name, schema);
+            stringBuilder.Append(")");
         }
 
         protected override void AppendRowsAffectedWhereCondition(StringBuilder commandStringBuilder, int expectedRowsAffected)

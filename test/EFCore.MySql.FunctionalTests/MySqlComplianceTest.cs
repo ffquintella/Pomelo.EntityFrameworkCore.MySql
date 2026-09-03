@@ -56,12 +56,14 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
             typeof(JsonUpdateTestBase<>),
             typeof(OptionalDependentQueryTestBase<>),
 
-            // TODO: EF Core 10 added new specification test suites (JSON-based Associations [provider has its own JSON
-            // support], ComplexProperties, dedicated Translations/Temporal/Operators/Type suites). These are deferred;
-            // the relational Associations suites (Navigations, OwnedNavigations, *TableSplitting) ARE implemented.
+            // EF10-SPEC-DEFERRALS: every entry in this explicit EF Core 10 list is classified in
+            // docs/efcore10-spec-deferrals.md. Existing provider-specific suites remain enabled; the
+            // entries below are only the newly split bases without a reconciled concrete provider slice.
+            // EF10-LAZYLOAD-RELATIONAL / EF10-COMPLEX-COLLECTIONS
             typeof(Microsoft.EntityFrameworkCore.LazyLoadProxyRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.ModelBuilding.ModelBuilderTest.ComplexCollectionTestBase),
             typeof(Microsoft.EntityFrameworkCore.ModelBuilding.RelationalModelBuilderTest.RelationalComplexCollectionTestBase),
+            // EF10-JSON-ADHOC / EF10-JSON-COMPLEX-ASSOCIATIONS
             typeof(Microsoft.EntityFrameworkCore.Query.AdHocJsonQueryRelationalTestBase),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexJson.ComplexJsonBulkUpdateRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexJson.ComplexJsonCollectionRelationalTestBase<>),
@@ -70,6 +72,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexJson.ComplexJsonProjectionRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexJson.ComplexJsonSetOperationsRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexJson.ComplexJsonStructuralEqualityRelationalTestBase<>),
+            // EF10-COMPLEX-PROPERTIES / EF10-JSON-OWNED-ASSOCIATIONS
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexProperties.ComplexPropertiesCollectionTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.ComplexProperties.ComplexPropertiesSetOperationsTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedJson.OwnedJsonBulkUpdateRelationalTestBase<>),
@@ -78,6 +81,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedJson.OwnedJsonPrimitiveCollectionRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedJson.OwnedJsonProjectionRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Associations.OwnedJson.OwnedJsonStructuralEqualityRelationalTestBase<>),
+            // EF10-TRANSLATIONS / EF10-TEMPORAL-TRANSLATIONS / EF10-TYPES
             typeof(Microsoft.EntityFrameworkCore.Query.Translations.MiscellaneousTranslationsRelationalTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.ArithmeticOperatorTranslationsTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Translations.Operators.BitwiseOperatorTranslationsTestBase<>),
@@ -92,11 +96,9 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
             typeof(Microsoft.EntityFrameworkCore.Query.Translations.Temporal.TimeOnlyTranslationsTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Query.Translations.Temporal.TimeSpanTranslationsTestBase<>),
             typeof(Microsoft.EntityFrameworkCore.Types.RelationalTypeTestBase<,>),
-            typeof(Microsoft.EntityFrameworkCore.Update.ComplexCollectionJsonUpdateTestBase<>),
 
-            // TODO: EF Core 10 split type/translation specification tests into dedicated base classes. The underlying
-            // translations are already exercised by the existing Northwind* query tests; implementing these dedicated
-            // suites is pending.
+            // EF10-SPLIT-TRANSLATIONS: existing Northwind*/built-in type suites remain enabled while these
+            // dedicated EF Core 10 split bases await provider-specific reconciliation.
             typeof(TypeTestBase<,>),
             typeof(ByteArrayTranslationsTestBase<>),
             typeof(EnumTranslationsTestBase<>),

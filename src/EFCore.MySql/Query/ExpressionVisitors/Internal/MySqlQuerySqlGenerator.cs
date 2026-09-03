@@ -477,6 +477,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.ExpressionVisitors.Internal
             var path = jsonScalarExpression.Path;
             if (path.Count == 0)
             {
+                Visit(jsonScalarExpression.Json);
                 return jsonScalarExpression;
             }
 

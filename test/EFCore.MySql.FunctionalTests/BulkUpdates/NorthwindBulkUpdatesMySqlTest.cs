@@ -1,5 +1,6 @@
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.BulkUpdates;
 using Microsoft.EntityFrameworkCore.TestModels.Northwind;
 using Microsoft.EntityFrameworkCore.TestUtilities;
@@ -652,6 +653,62 @@ WHERE EXISTS (
         AssertSql(
 """
 DELETE `o`
+FROM `Order Details` AS `o`
+INNER JOIN `Orders` AS `o0` ON `o`.`OrderID` = `o0`.`OrderID`
+LEFT JOIN `Customers` AS `c` ON `o0`.`CustomerID` = `c`.`CustomerID`
+WHERE `c`.`City` LIKE 'Se%'
+""");
+    }
+
+    [ConditionalFact]
+    public async Task Delete_with_optional_navigation_and_take()
+    {
+        await TestHelpers.ExecuteWithStrategyInTransactionAsync(
+            () => Fixture.CreateContext(),
+            (facade, transaction) => Fixture.UseTransaction(facade, transaction),
+            async context =>
+            {
+                var matching = context.Set<OrderDetail>()
+                    .Where(od => od.Order.Customer.City.StartsWith("Se"));
+
+                var before = await matching.CountAsync();
+                var affected = await matching.Take(1).ExecuteDeleteAsync();
+                var after = await matching.CountAsync();
+
+                Assert.Equal(66, before);
+                Assert.Equal(1, affected);
+                Assert.Equal(65, after);
+            });
+
+        AssertSql(
+            """
+SELECT COUNT(*)
+FROM `Order Details` AS `o`
+INNER JOIN `Orders` AS `o0` ON `o`.`OrderID` = `o0`.`OrderID`
+LEFT JOIN `Customers` AS `c` ON `o0`.`CustomerID` = `c`.`CustomerID`
+WHERE `c`.`City` LIKE 'Se%'
+""",
+            //
+            """
+@p='1'
+
+DELETE `o`
+FROM `Order Details` AS `o`
+WHERE EXISTS (
+    SELECT 1
+    FROM (
+        SELECT `o0`.`OrderID`, `o0`.`ProductID`
+        FROM `Order Details` AS `o0`
+        INNER JOIN `Orders` AS `o1` ON `o0`.`OrderID` = `o1`.`OrderID`
+        LEFT JOIN `Customers` AS `c` ON `o1`.`CustomerID` = `c`.`CustomerID`
+        WHERE `c`.`City` LIKE 'Se%'
+        LIMIT @p
+    ) AS `s`
+    WHERE (`s`.`OrderID` = `o`.`OrderID`) AND (`s`.`ProductID` = `o`.`ProductID`))
+""",
+            //
+            """
+SELECT COUNT(*)
 FROM `Order Details` AS `o`
 INNER JOIN `Orders` AS `o0` ON `o`.`OrderID` = `o0`.`OrderID`
 LEFT JOIN `Customers` AS `c` ON `o0`.`CustomerID` = `c`.`CustomerID`
